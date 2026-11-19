@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Customer Churn Predictor</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 760px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            color: #222;
+        }
+
+        h1 {
+            margin-bottom: 0.25rem;
+        }
+
+        .sub {
+            color: #666;
+            margin-top: 0;
+        }
+
+        form {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem 1.5rem;
+        }
+
+        label {
+            display: flex;
+            flex-direction: column;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        input,
+        select {
+            margin-top: 0.25rem;
+            padding: 0.4rem;
+            font-size: 0.95rem;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+        }
+
+        button {
+            grid-column: 1 / -1;
+            padding: 0.7rem;
+            font-size: 1rem;
+            border: 0;
+            border-radius: 4px;
+            background: #2457c5;
+            color: white;
+            cursor: pointer;
+        }
+
+        #result {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .churn {
+            background: #fbebeb;
+            border: 1px solid #e5a3a3;
+        }
+
+        .stay {
+            background: #e5f4e4;
+            border: 1px solid #9fcf9c;
+        }
+
+        .error {
+            background: #f9eeda;
+            border: 1px solid #e0c080;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Customer Churn Predictor</h1>
+    <p class="sub">Enter a customer's details to estimate how likely they are to leave.</p>
+
+    <form id="customer-form">
+        {% for field in fields %}
+        <label>
+            {{ field.name }}
+            {% if field.choices %}
+            <select name="{{ field.name }}">
+                {% for choice in field.choices %}
+                <option value="{{ choice }}" {% if choice==example[field.name] %}selected{% endif %}>{{ choice }}
+                </option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <input type="number" name="{{ field.name }}" step="{{ field.step }}" min="0"
+                value="{{ example[field.name] }}" required>
+            {% endif %}
+        </label>
+        {% endfor %}
+        <button type="submit">Predict churn</button>
+    </form>
+
+    <div id="result"></div>
+
+    <script>
+        const form = document.getElementById("customer-form");
+        const result = document.getElementById("result");
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            // Build the JSON body. Numbers and the 0/1 SeniorCitizen field must be sent as numbers.
+            const data = {};
+            for (const [name, value] of new FormData(form)) {
+                const element = form.elements[name];
+                const isNumber = element.type === "number" || name === "SeniorCitizen";
+                data[name] = isNumber ? Number(value) : value;
+            }
+
+            const response = await fetch("/predict", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+            });
+            const body = await response.json();
+            result.style.display = "block";
+
+            if (!response.ok) {
+                result.className = "error";
+                result.textContent = "Invalid input: " + JSON.stringify(body.detail);
+                return;
+            }
+
+            const percent = (body.churn_probability * 100).toFixed(1);
+            result.className = body.will_churn ? "churn" : "stay";
+            result.innerHTML = body.will_churn
+                ? `<strong>Likely to churn</strong> (${percent}% probability). Recommend a retention offer.`
+                : `<strong>Likely to stay</strong> (${percent}% probability). No action needed.`;
+            result.innerHTML += `<br><small>Model: ${body.model}, decision threshold: ${body.threshold}</small>`;
+        });
+    </script>
+</body>
+
+</html>
